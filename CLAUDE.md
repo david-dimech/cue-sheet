@@ -1,4 +1,4 @@
-# Vamp — Real-time Chord Chart Sync
+# Cue Sheet — Real-time Chord Chart Sync
 
 Band leaders push chord charts to musicians' screens live during a gig. Members join via a 6-character session code. No authentication — fully open access.
 

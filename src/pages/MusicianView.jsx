@@ -66,7 +66,7 @@ export default function MusicianView() {
     loadCurrentSong(sess.current_song_id)
 
     // Prefer the stored participant ID (set on join) to avoid name-collision issues
-    const storedId = sessionStorage.getItem(`vamp_participant_${code}`)
+    const storedId = sessionStorage.getItem(`cuesheet_participant_${code}`)
     let participant = null
 
     if (storedId) {
@@ -91,7 +91,7 @@ export default function MusicianView() {
       participant = data
       // Re-store the recovered ID for subsequent refreshes
       if (participant) {
-        sessionStorage.setItem(`vamp_participant_${code}`, participant.id)
+        sessionStorage.setItem(`cuesheet_participant_${code}`, participant.id)
       }
     }
 

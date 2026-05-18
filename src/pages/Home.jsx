@@ -108,7 +108,7 @@ export default function Home() {
       if (pErr) throw pErr
 
       // Store participant ID so MusicianView can find this exact row
-      sessionStorage.setItem(`vamp_participant_${code}`, participant.id)
+      sessionStorage.setItem(`cuesheet_participant_${code}`, participant.id)
 
       navigate(`/session/${code}/musician?name=${encodeURIComponent(displayName.trim())}`)
     } catch (e) {
@@ -123,7 +123,7 @@ export default function Home() {
       <div style={{ width: '100%', maxWidth: '420px' }}>
         <div style={{ textAlign: 'center', marginBottom: '48px' }}>
           <div style={{ fontSize: '48px', marginBottom: '8px' }}>🎸</div>
-          <h1 style={{ fontSize: '40px', fontWeight: '800', color: '#f3f4f6', margin: '0 0 8px', letterSpacing: '-1px' }}>Vamp</h1>
+          <h1 style={{ fontSize: '40px', fontWeight: '800', color: '#f3f4f6', margin: '0 0 8px', letterSpacing: '-1px' }}>Cue Sheet</h1>
           <p style={{ color: '#6b7280', fontSize: '16px', margin: 0 }}>Real-time chord charts for live gigs</p>
         </div>
 
