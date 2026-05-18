@@ -84,23 +84,33 @@ export default function Home() {
     setLoading(true)
     setError('')
     try {
+      const code = joinCode.trim().toUpperCase()
+
       const { data: session, error: err } = await supabase
         .from('sessions')
         .select('id')
-        .eq('code', joinCode.trim().toUpperCase())
+        .eq('code', code)
         .maybeSingle()
 
       if (err) throw err
       if (!session) { setError('Session not found'); setLoading(false); return }
 
-      const { error: pErr } = await supabase.from('participants').insert({
-        session_id: session.id,
-        display_name: displayName.trim(),
-        has_control: false,
-      })
+      const { data: participant, error: pErr } = await supabase
+        .from('participants')
+        .insert({
+          session_id: session.id,
+          display_name: displayName.trim(),
+          has_control: false,
+        })
+        .select()
+        .single()
+
       if (pErr) throw pErr
 
-      navigate(`/session/${joinCode.trim().toUpperCase()}/musician?name=${encodeURIComponent(displayName.trim())}`)
+      // Store participant ID so MusicianView can find this exact row
+      sessionStorage.setItem(`vamp_participant_${code}`, participant.id)
+
+      navigate(`/session/${code}/musician?name=${encodeURIComponent(displayName.trim())}`)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -147,30 +157,18 @@ export default function Home() {
             <button onClick={() => setMode(null)} style={backBtn}>← Back</button>
             <h2 style={sectionTitle}>Start a Session</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <select
-                value={selectedFolder}
-                onChange={handleFolderChange}
-                style={selectStyle}
-              >
+              <select value={selectedFolder} onChange={handleFolderChange} style={selectStyle}>
                 <option value="">Select a band / folder</option>
                 {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
               {selectedFolder && (
-                <select
-                  value={selectedSetlist}
-                  onChange={e => setSelectedSetlist(e.target.value)}
-                  style={selectStyle}
-                >
+                <select value={selectedSetlist} onChange={e => setSelectedSetlist(e.target.value)} style={selectStyle}>
                   <option value="">No setlist (browse all songs)</option>
                   {setlists.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               )}
               {error && <p style={{ color: '#f87171', fontSize: '14px', margin: 0 }}>{error}</p>}
-              <button
-                onClick={handleStartSession}
-                disabled={loading}
-                style={btnStyle('#7c3aed')}
-              >
+              <button onClick={handleStartSession} disabled={loading} style={btnStyle('#7c3aed')}>
                 {loading ? 'Starting...' : 'Start Session'}
               </button>
             </div>
@@ -198,11 +196,7 @@ export default function Home() {
                 style={inputStyle}
               />
               {error && <p style={{ color: '#f87171', fontSize: '14px', margin: 0 }}>{error}</p>}
-              <button
-                onClick={handleJoinSession}
-                disabled={loading}
-                style={btnStyle('#7c3aed')}
-              >
+              <button onClick={handleJoinSession} disabled={loading} style={btnStyle('#7c3aed')}>
                 {loading ? 'Joining...' : 'Join Session'}
               </button>
             </div>
@@ -224,26 +218,15 @@ const inputStyle = {
   width: '100%',
 }
 
-const selectStyle = {
-  ...inputStyle,
-  cursor: 'pointer',
-}
+const selectStyle = { ...inputStyle, cursor: 'pointer' }
 
 const backBtn = {
-  background: 'none',
-  border: 'none',
-  color: '#6b7280',
-  fontSize: '14px',
-  cursor: 'pointer',
-  padding: '0 0 16px',
-  display: 'block',
+  background: 'none', border: 'none', color: '#6b7280',
+  fontSize: '14px', cursor: 'pointer', padding: '0 0 16px', display: 'block',
 }
 
 const sectionTitle = {
-  color: '#f3f4f6',
-  fontSize: '22px',
-  fontWeight: '700',
-  margin: '0 0 20px',
+  color: '#f3f4f6', fontSize: '22px', fontWeight: '700', margin: '0 0 20px',
 }
 
 function btnStyle(bg, borderColor) {

@@ -4,13 +4,26 @@ import { supabase } from '../lib/supabase'
 import ChartViewer from '../components/ChartViewer'
 import SongPicker from '../components/SongPicker'
 
+function useIsMobile() {
+  const [mobile, setMobile] = useState(() => window.innerWidth < 768)
+  useEffect(() => {
+    const handler = () => setMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
+  return mobile
+}
+
 export default function LeaderView() {
   const { code } = useParams()
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
   const [session, setSession] = useState(null)
   const [currentSong, setCurrentSong] = useState(null)
   const [participants, setParticipants] = useState([])
   const [showParticipants, setShowParticipants] = useState(false)
+  // Mobile: 'songs' is the default so leader can pick immediately
+  const [mobileTab, setMobileTab] = useState('songs')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -45,11 +58,7 @@ export default function LeaderView() {
   }, [session?.id])
 
   async function loadSession() {
-    const { data } = await supabase
-      .from('sessions')
-      .select('*')
-      .eq('code', code)
-      .single()
+    const { data } = await supabase.from('sessions').select('*').eq('code', code).single()
     setSession(data)
     setLoading(false)
   }
@@ -71,6 +80,8 @@ export default function LeaderView() {
 
   async function pickSong(song) {
     await supabase.from('sessions').update({ current_song_id: song.id }).eq('id', session.id)
+    // On mobile, switch to chart view so leader can see what was pushed
+    if (isMobile) setMobileTab('chart')
   }
 
   async function toggleControl(participant) {
@@ -90,53 +101,110 @@ export default function LeaderView() {
   }
 
   if (!session) {
-    return <div style={centered}>Session not found. <button onClick={() => navigate('/')} style={linkBtn}>Go home</button></div>
+    return (
+      <div style={centered}>
+        Session not found.{' '}
+        <button onClick={() => navigate('/')} style={linkBtn}>Go home</button>
+      </div>
+    )
   }
 
-  return (
-    <div style={pageStyle}>
-      <div style={topBar}>
-        <div>
-          <span style={codeLabel}>SESSION</span>
-          <span style={codeText}>{code}</span>
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+  const topBar = (
+    <div style={topBarStyle}>
+      <div>
+        <span style={codeLabel}>SESSION</span>
+        <span style={codeText}>{code}</span>
+      </div>
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <button onClick={() => setShowParticipants(p => !p)} style={topBarBtn}>
+          👥 {participants.length}
+        </button>
+        <button onClick={endSession} style={{ ...topBarBtn, color: '#f87171' }}>End</button>
+      </div>
+    </div>
+  )
+
+  const participantsPanel = showParticipants && (
+    <div style={participantsPanelStyle}>
+      <h3 style={{ color: '#f3f4f6', fontSize: '15px', fontWeight: '600', margin: '0 0 10px' }}>Participants</h3>
+      {participants.map(p => (
+        <div key={p.id} style={participantRow}>
+          <span style={{ color: p.has_control ? '#a855f7' : '#f3f4f6', fontSize: '14px', flex: 1 }}>
+            {p.has_control ? '🎛️ ' : ''}{p.display_name}
+          </span>
           <button
-            onClick={() => setShowParticipants(p => !p)}
-            style={topBarBtn}
+            onClick={() => toggleControl(p)}
+            style={{
+              ...controlBtn,
+              background: p.has_control ? '#7c3aed' : '#2a2a3a',
+              color: p.has_control ? '#fff' : '#9ca3af',
+            }}
           >
-            👥 {participants.length}
+            {p.has_control ? 'Revoke' : 'Give Control'}
           </button>
-          <button onClick={endSession} style={{ ...topBarBtn, color: '#f87171' }}>End</button>
+        </div>
+      ))}
+    </div>
+  )
+
+  // ── Mobile layout ───────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <div style={pageStyle}>
+        {topBar}
+        {participantsPanel}
+
+        {/* Now-playing bar — always visible */}
+        <div style={nowPlayingBar}>
+          <span style={{ color: '#6b7280', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Now playing
+          </span>
+          <span style={{ color: '#f3f4f6', fontSize: '15px', fontWeight: '600', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {currentSong ? currentSong.name : '—'}
+          </span>
+        </div>
+
+        {/* Tab bar */}
+        <div style={mobileTabBar}>
+          <button
+            onClick={() => setMobileTab('songs')}
+            style={mobileTab === 'songs' ? mobileActiveTab : mobileInactiveTab}
+          >
+            Songs
+          </button>
+          <button
+            onClick={() => setMobileTab('chart')}
+            style={mobileTab === 'chart' ? mobileActiveTab : mobileInactiveTab}
+          >
+            Chart
+          </button>
+        </div>
+
+        {/* Tab content */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {mobileTab === 'songs' ? (
+            <SongPicker
+              session={session}
+              currentSongId={currentSong?.id}
+              onPick={pickSong}
+            />
+          ) : (
+            <ChartViewer song={currentSong} />
+          )}
         </div>
       </div>
+    )
+  }
 
-      {showParticipants && (
-        <div style={participantsPanel}>
-          <h3 style={{ color: '#f3f4f6', fontSize: '15px', fontWeight: '600', margin: '0 0 10px' }}>Participants</h3>
-          {participants.map(p => (
-            <div key={p.id} style={participantRow}>
-              <span style={{ color: p.has_control ? '#a855f7' : '#f3f4f6', fontSize: '14px', flex: 1 }}>
-                {p.has_control ? '🎛️ ' : ''}{p.display_name}
-              </span>
-              <button
-                onClick={() => toggleControl(p)}
-                style={{
-                  ...controlBtn,
-                  background: p.has_control ? '#7c3aed' : '#2a2a3a',
-                  color: p.has_control ? '#fff' : '#9ca3af',
-                }}
-              >
-                {p.has_control ? 'Revoke' : 'Give Control'}
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+  // ── Desktop layout (side-by-side) ───────────────────────────
+  return (
+    <div style={pageStyle}>
+      {topBar}
+      {participantsPanel}
 
-      <div style={mainLayout}>
+      <div style={desktopLayout}>
         <div style={chartArea}>
-          <div style={songTitle}>
+          <div style={songTitleBar}>
             {currentSong ? currentSong.name : 'No song selected'}
           </div>
           <ChartViewer song={currentSong} />
@@ -159,7 +227,7 @@ const pageStyle = {
   backgroundColor: '#0a0a0f', minHeight: '100dvh', display: 'flex', flexDirection: 'column',
 }
 
-const topBar = {
+const topBarStyle = {
   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
   padding: '12px 16px', background: '#111118', borderBottom: '1px solid #2a2a3a',
   flexShrink: 0,
@@ -173,9 +241,8 @@ const topBarBtn = {
   color: '#f3f4f6', cursor: 'pointer', fontSize: '14px', padding: '8px 14px',
 }
 
-const participantsPanel = {
-  background: '#111118', borderBottom: '1px solid #2a2a3a', padding: '16px',
-  flexShrink: 0,
+const participantsPanelStyle = {
+  background: '#111118', borderBottom: '1px solid #2a2a3a', padding: '16px', flexShrink: 0,
 }
 
 const participantRow = {
@@ -188,25 +255,44 @@ const controlBtn = {
   fontSize: '12px', fontWeight: '600', padding: '6px 12px',
 }
 
-const mainLayout = {
-  flex: 1, display: 'flex', overflow: 'hidden',
+const nowPlayingBar = {
+  display: 'flex', alignItems: 'center', gap: '10px',
+  padding: '10px 16px', background: '#111118', borderBottom: '1px solid #2a2a3a',
+  flexShrink: 0,
 }
+
+const mobileTabBar = {
+  display: 'flex', background: '#111118', borderBottom: '1px solid #2a2a3a',
+  flexShrink: 0,
+}
+
+const mobileActiveTab = {
+  flex: 1, background: 'none', border: 'none', borderBottom: '2px solid #7c3aed',
+  color: '#a855f7', cursor: 'pointer', fontSize: '15px', fontWeight: '700',
+  padding: '14px',
+}
+
+const mobileInactiveTab = {
+  flex: 1, background: 'none', border: 'none', borderBottom: '2px solid transparent',
+  color: '#6b7280', cursor: 'pointer', fontSize: '15px', padding: '14px',
+}
+
+// Desktop-only styles
+const desktopLayout = { flex: 1, display: 'flex', overflow: 'hidden' }
 
 const chartArea = {
   flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
-  borderRight: '1px solid #2a2a3a',
-  minWidth: 0,
+  borderRight: '1px solid #2a2a3a', minWidth: 0,
 }
 
-const songTitle = {
+const songTitleBar = {
   padding: '12px 16px', color: '#f3f4f6', fontSize: '16px', fontWeight: '700',
   background: '#111118', borderBottom: '1px solid #2a2a3a', flexShrink: 0,
   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
 }
 
 const pickerArea = {
-  width: '300px', display: 'flex', flexDirection: 'column', overflow: 'hidden',
-  flexShrink: 0,
+  width: '300px', display: 'flex', flexDirection: 'column', overflow: 'hidden', flexShrink: 0,
 }
 
 const pickerHeader = {
@@ -215,5 +301,11 @@ const pickerHeader = {
   background: '#111118', borderBottom: '1px solid #2a2a3a', flexShrink: 0,
 }
 
-const centered = { display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100dvh', color: '#f3f4f6' }
-const linkBtn = { background: 'none', border: 'none', color: '#a855f7', cursor: 'pointer', fontSize: '16px' }
+const centered = {
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  minHeight: '100dvh', color: '#f3f4f6',
+}
+
+const linkBtn = {
+  background: 'none', border: 'none', color: '#a855f7', cursor: 'pointer', fontSize: '16px',
+}

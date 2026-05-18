@@ -31,10 +31,6 @@ export default function MusicianView() {
         table: 'sessions',
         filter: `id=eq.${session.id}`,
       }, payload => {
-        if (payload.eventType === 'DELETE' || !payload.new) {
-          setDisconnected(true)
-          return
-        }
         setSession(prev => ({ ...prev, ...payload.new }))
         loadCurrentSong(payload.new.current_song_id)
       })
@@ -69,14 +65,35 @@ export default function MusicianView() {
     setSession(sess)
     loadCurrentSong(sess.current_song_id)
 
-    const { data: participant } = await supabase
-      .from('participants')
-      .select('*')
-      .eq('session_id', sess.id)
-      .eq('display_name', displayName)
-      .order('joined_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+    // Prefer the stored participant ID (set on join) to avoid name-collision issues
+    const storedId = sessionStorage.getItem(`vamp_participant_${code}`)
+    let participant = null
+
+    if (storedId) {
+      const { data } = await supabase
+        .from('participants')
+        .select('*')
+        .eq('id', storedId)
+        .maybeSingle()
+      participant = data
+    }
+
+    // Fall back to name match (e.g. page refreshed without stored ID)
+    if (!participant) {
+      const { data } = await supabase
+        .from('participants')
+        .select('*')
+        .eq('session_id', sess.id)
+        .eq('display_name', displayName)
+        .order('joined_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      participant = data
+      // Re-store the recovered ID for subsequent refreshes
+      if (participant) {
+        sessionStorage.setItem(`vamp_participant_${code}`, participant.id)
+      }
+    }
 
     setMyParticipant(participant)
     setLoading(false)
@@ -126,9 +143,7 @@ export default function MusicianView() {
           {currentSong && <span style={titleSmall}>{currentSong.name}</span>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {hasControl && (
-            <span style={controlBadge}>🎛️ Control</span>
-          )}
+          {hasControl && <span style={controlBadge}>🎛️ Control</span>}
           <span style={namePill}>{displayName}</span>
         </div>
       </div>
@@ -139,10 +154,7 @@ export default function MusicianView() {
 
       {hasControl && (
         <>
-          <button
-            onClick={() => setPickerOpen(p => !p)}
-            style={pickerToggle}
-          >
+          <button onClick={() => setPickerOpen(p => !p)} style={pickerToggle}>
             {pickerOpen ? '▼ Close Picker' : '▲ Song Picker'}
           </button>
           {pickerOpen && (
